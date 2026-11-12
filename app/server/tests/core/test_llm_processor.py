@@ -332,10 +332,43 @@ class TestLLMProcessor:
                 with pytest.raises(RuntimeError, match="Copilot returned"):
                     generate_sql_with_copilot("show users", schema)
 
-        client_class.assert_called_once_with(mode="empty")
+        client_class.assert_called_once_with(
+            mode="empty",
+            base_directory=os.environ.get("COPILOT_HOME") or os.path.join(os.path.expanduser("~"), ".copilot"),
+        )
         client.create_session.assert_awaited_once_with(model="auto", available_tools=[])
         session.__aexit__.assert_awaited_once()
         client.__aexit__.assert_awaited_once()
+
+    @pytest.mark.parametrize("configured_home", [False, True])
+    def test_copilot_empty_mode_uses_valid_explicit_storage(self, tmp_path, configured_home):
+        copilot = pytest.importorskip("copilot")
+        from copilot.session_events import AssistantMessageData
+
+        real_client_class = copilot.CopilotClient
+        session = MagicMock()
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock()
+        session.send_and_wait = AsyncMock(return_value=MagicMock(
+            data=AssistantMessageData(content="SELECT 1", message_id="id")
+        ))
+        client = MagicMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock()
+        client.create_session = AsyncMock(return_value=session)
+        environment = {"COPILOT_HOME": str(tmp_path / "custom")} if configured_home else {}
+
+        def construct_client(**kwargs):
+            real_client_class(**kwargs)
+            return client
+
+        with patch.dict(os.environ, environment, clear=True), \
+             patch("core.llm_processor.os.path.expanduser", return_value=str(tmp_path)), \
+             patch.object(real_client_class, "_resolve_runtime_entrypoint", return_value="copilot"), \
+             patch.object(copilot, "CopilotClient", side_effect=construct_client) as factory:
+            assert generate_sql_with_copilot("show one", {"tables": {}}) == "SELECT 1"
+        expected = tmp_path / ("custom" if configured_home else ".copilot")
+        factory.assert_called_once_with(mode="empty", base_directory=str(expected))
 
     def test_copilot_errors_are_reported(self):
         copilot = pytest.importorskip("copilot")

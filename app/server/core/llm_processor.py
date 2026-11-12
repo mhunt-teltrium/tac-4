@@ -100,7 +100,8 @@ def generate_sql_with_copilot(query_text: str, schema_info: Dict[str, Any]) -> s
         except ImportError as e:
             raise RuntimeError("Copilot requires Python 3.11+ and github-copilot-sdk") from e
 
-        async with CopilotClient(mode="empty") as client:
+        copilot_home = os.environ.get("COPILOT_HOME") or os.path.join(os.path.expanduser("~"), ".copilot")
+        async with CopilotClient(mode="empty", base_directory=copilot_home) as client:
             async with await client.create_session(model="auto", available_tools=[]) as session:
                 response = await session.send_and_wait(build_sql_prompt(query_text, schema_info))
                 if response is None or not isinstance(response.data, AssistantMessageData):

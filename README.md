@@ -53,6 +53,8 @@ For Copilot, set `COPILOT_GITHUB_TOKEN` in `app/server/.env` to a supported
 GitHub token with Copilot access. The Copilot SDK requires Python 3.11+ and
 downloads its runtime on first use; it can also use an authenticated Copilot
 CLI or GitHub CLI account when `llm_provider` is explicitly set to `copilot`.
+The server uses `COPILOT_HOME`, or `~/.copilot` by default, for Copilot data
+and CLI authentication. Use a separate Copilot home for each server account.
 See [Copilot SDK authentication](https://github.com/github/copilot-sdk/blob/main/docs/auth/authenticate.md)
 for supported tokens and subscription requirements.
 

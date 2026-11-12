@@ -18,6 +18,6 @@ pkill -f "trigger_webhook.py" 2>/dev/null
 
 # Kill processes on specific ports
 echo -e "${GREEN}Killing processes on ports 5173, 8000, and 8001...${NC}"
-lsof -ti:5173,8000,8001 | xargs kill -9 2>/dev/null
+powershell.exe -NoProfile -Command 'Get-NetTCPConnection -LocalPort 5173,8000,8001 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }'
 
 echo -e "${GREEN}✓ Services stopped successfully!${NC}"
