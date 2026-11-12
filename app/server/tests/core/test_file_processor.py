@@ -6,7 +6,8 @@ import os
 import io
 from pathlib import Path
 from unittest.mock import patch
-from core.file_processor import convert_csv_to_sqlite, convert_json_to_sqlite
+from core.file_processor import convert_csv_to_sqlite, convert_json_to_sqlite, convert_jsonl_to_sqlite
+from core import constants
 
 
 @pytest.fixture
@@ -162,3 +163,46 @@ class TestFileProcessor:
             convert_json_to_sqlite(json_data, table_name)
         
         assert "JSON array is empty" in str(exc_info.value)
+
+    def test_convert_jsonl_flat(self, test_db, test_assets_dir):
+        data = (test_assets_dir / "test_simple.jsonl").read_bytes()
+        result = convert_jsonl_to_sqlite(data, "simple")
+        assert result['table_name'] == "simple"
+        assert list(result['schema']) == ['id', 'name', 'price']
+        assert result['row_count'] == 3
+
+    def test_convert_jsonl_nested_and_union(self, test_db, test_assets_dir):
+        data = (test_assets_dir / "test_events.jsonl").read_bytes()
+        result = convert_jsonl_to_sqlite(data, "events")
+        cols = result['schema']
+        for c in ['user__name', 'user__address__city', 'tags__0', 'tags__1',
+                  'items__0__name', 'items__1__qty', 'error_code', 'metadata__region']:
+            assert c in cols
+        assert result['row_count'] == 4
+        first = result['sample_data'][0]
+        assert first['error_code'] is None
+        assert first['user__address__city'] == "Paris"
+        assert result['sample_data'][2]['error_code'] == 500
+
+    def test_convert_jsonl_custom_delimiter(self, test_db, monkeypatch):
+        monkeypatch.setattr(constants, "NESTED_FIELD_DELIMITER", ".")
+        result = convert_jsonl_to_sqlite(b'{"a": {"b": 1}, "t": [5]}', "delim")
+        assert list(result['schema']) == ['a.b', 't.0']
+
+    def test_convert_jsonl_blank_lines_crlf_bom_collision(self, test_db):
+        data = b'\xef\xbb\xbf{"Key": 1, "key": 2}\r\n\r\n{"Key": 3}\r\n'
+        result = convert_jsonl_to_sqlite(data, "edge")
+        assert list(result['schema']) == ['key', 'key_2']
+        assert result['row_count'] == 2
+
+    def test_convert_jsonl_malformed_line(self, test_assets_dir):
+        data = (test_assets_dir / "invalid.jsonl").read_bytes()
+        with pytest.raises(Exception) as exc_info:
+            convert_jsonl_to_sqlite(data, "bad")
+        assert "line 2" in str(exc_info.value)
+
+    def test_convert_jsonl_empty_and_non_object(self):
+        with pytest.raises(Exception, match="empty"):
+            convert_jsonl_to_sqlite(b"\n  \n", "t")
+        with pytest.raises(Exception, match="(?i)line 1"):
+            convert_jsonl_to_sqlite(b"[1,2]\n", "t")

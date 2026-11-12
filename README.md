@@ -5,7 +5,7 @@ A web application that converts natural language queries to SQL using AI, built 
 ## Features
 
 - 🗣️ Natural language to SQL conversion using OpenAI, Anthropic, or GitHub Copilot
-- 📁 Drag-and-drop file upload (.csv and .json)
+- 📁 Drag-and-drop file upload (.csv, .json, and .jsonl). JSONL records are flattened into one table: nested fields use a `__` delimiter (e.g. `user__name`), list items use their index (`tags__0`), and the delimiter is configurable in `app/server/core/constants.py`
 - 📊 Interactive table results display
 - 🔒 SQL injection protection
 - ⚡ Fast development with Vite and uv
@@ -98,7 +98,7 @@ npm run dev
 
 1. **Upload Data**: Click "Upload Data" to open the modal
    - Use sample data buttons for quick testing
-   - Or drag and drop your own .csv or .json files
+   - Or drag and drop your own .csv, .json, or .jsonl files
    - Uploading a file with the same name will overwrite the existing table
 2. **Query Your Data**: Type a natural language query like "Show me all users who signed up last week"
    - Press `Cmd+Enter` (Mac) or `Ctrl+Enter` (Windows/Linux) to run the query
