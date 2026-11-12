@@ -13,7 +13,7 @@ from data_types import AgentPromptRequest, AgentPromptResponse, AgentTemplateReq
 load_dotenv()
 
 COPILOT_PATH = os.getenv("COPILOT_CODE_PATH", "copilot")
-MODEL_NAMES = {"sonnet": "claude-sonnet-4.5", "opus": "claude-opus-4.6"}
+MODEL_NAMES = {"sonnet": "claude-sonnet-5.5", "opus": "claude-opus-5.5"}
 
 
 def check_copilot_installed() -> Optional[str]:
