@@ -1,0 +1,4 @@
+{"id": 1, "event": "login", "user": {"name": "Alice", "address": {"city": "Paris"}}, "tags": ["a", "b"], "items": [{"name": "x", "qty": 1}, {"name": "y", "qty": 2}]}
+{"id": 2, "event": "logout", "user": {"name": "Bob", "address": {"city": "Rome"}}, "tags": ["c"], "items": []}
+{"id": 3, "event": "error", "user": {"name": "Carol", "address": {"city": "Oslo"}}, "error_code": 500}
+{"id": 4, "event": "login", "user": {"name": "Dan", "address": {"city": "Lima"}}, "metadata": {"region": "us-east"}, "tags": []}
