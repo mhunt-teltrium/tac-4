@@ -1,11 +1,11 @@
-"""Data types for GitHub API responses and Claude Code agent."""
+"""Data types for GitHub API responses and the Copilot agent."""
 
 from datetime import datetime
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 
 # Supported slash commands for issue classification
-# These should align with your custom slash commands in .claude/commands that you want to run
+# These should align with the workflow skills in .github/skills.
 IssueClassSlashCommand = Literal["/chore", "/bug", "/feature"]
 
 # All slash commands used in the ADW system
@@ -101,7 +101,7 @@ class GitHubIssue(BaseModel):
 
 
 class AgentPromptRequest(BaseModel):
-    """Claude Code agent prompt configuration."""
+    """Copilot agent prompt configuration."""
 
     prompt: str
     adw_id: str
@@ -112,7 +112,7 @@ class AgentPromptRequest(BaseModel):
 
 
 class AgentPromptResponse(BaseModel):
-    """Claude Code agent response."""
+    """Copilot agent response."""
 
     output: str
     success: bool
@@ -120,24 +120,10 @@ class AgentPromptResponse(BaseModel):
 
 
 class AgentTemplateRequest(BaseModel):
-    """Claude Code agent template execution request."""
+    """Copilot agent template execution request."""
 
     agent_name: str
     slash_command: SlashCommand
     args: List[str]
     adw_id: str
     model: Literal["sonnet", "opus"] = "sonnet"
-
-
-class ClaudeCodeResultMessage(BaseModel):
-    """Claude Code JSONL result message (last line)."""
-
-    type: str
-    subtype: str
-    is_error: bool
-    duration_ms: int
-    duration_api_ms: int
-    num_turns: int
-    result: str
-    session_id: str
-    total_cost_usd: float

@@ -16,13 +16,12 @@ uv run adws/health_check.py <issue_number>
 This script performs comprehensive health checks:
 1. Validates all required environment variables
 2. Checks git repository configuration
-3. Tests Claude Code CLI functionality
+3. Tests Copilot CLI functionality
 4. Returns structured results
 """
 
 import os
 import sys
-import json
 import subprocess
 import tempfile
 from typing import Dict, List, Optional, Any
@@ -35,6 +34,8 @@ from pydantic import BaseModel
 
 # Import git repo functions from github module
 from github import get_repo_url, extract_repo_path, make_issue_comment
+from agent import prompt_copilot
+from data_types import AgentPromptRequest
 
 # Load environment variables
 load_dotenv()
@@ -61,42 +62,25 @@ class HealthCheckResult(BaseModel):
 
 def check_env_vars() -> CheckResult:
     """Check required environment variables."""
-    required_vars = {
-        "ANTHROPIC_API_KEY": "Anthropic API Key for Claude Code",
-        "CLAUDE_CODE_PATH": "Path to Claude Code CLI (defaults to 'claude')",
-    }
-
     optional_vars = {
+        "COPILOT_CODE_PATH": "Path to Copilot CLI (defaults to 'copilot')",
         "GITHUB_PAT": "(Optional) GitHub Personal Access Token - only needed if you want ADW to use a different GitHub account than 'gh auth login'",
         "E2B_API_KEY": "(Optional) E2B API Key for sandbox environments",
         "CLOUDFLARED_TUNNEL_TOKEN": "(Optional) Cloudflare tunnel token for webhook exposure",
     }
 
-    missing_required = []
     missing_optional = []
-
-    # Check required vars
-    for var, desc in required_vars.items():
-        if not os.getenv(var):
-            if var == "CLAUDE_CODE_PATH":
-                # This has a default, so not critical
-                continue
-            missing_required.append(f"{var} ({desc})")
 
     # Check optional vars
     for var, desc in optional_vars.items():
         if not os.getenv(var):
             missing_optional.append(f"{var} ({desc})")
 
-    success = len(missing_required) == 0
-
     return CheckResult(
-        success=success,
-        error="Missing required environment variables" if not success else None,
+        success=True,
         details={
-            "missing_required": missing_required,
             "missing_optional": missing_optional,
-            "claude_code_path": os.getenv("CLAUDE_CODE_PATH", "claude"),
+            "copilot_code_path": os.getenv("COPILOT_CODE_PATH", "copilot"),
         },
     )
 
@@ -128,96 +112,23 @@ def check_git_repo() -> CheckResult:
         return CheckResult(success=False, error=str(e))
 
 
-def check_claude_code() -> CheckResult:
-    """Test Claude Code CLI functionality."""
-    claude_path = os.getenv("CLAUDE_CODE_PATH", "claude")
-
-    # First check if Claude Code is installed
-    try:
-        result = subprocess.run(
-            [claude_path, "--version"], capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            return CheckResult(
-                success=False,
-                error=f"Claude Code CLI not functional at '{claude_path}'",
-            )
-    except FileNotFoundError:
-        return CheckResult(
-            success=False,
-            error=f"Claude Code CLI not found at '{claude_path}'. Please install or set CLAUDE_CODE_PATH correctly.",
-        )
-
-    # Test with a simple prompt
-    test_prompt = "What is 2+2? Just respond with the number, nothing else."
-
-    # Prepare environment
-    env = os.environ.copy()
-    if os.getenv("GITHUB_PAT"):
-        env["GH_TOKEN"] = os.getenv("GITHUB_PAT")
-
-    try:
-        # Create temporary file for output
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".jsonl", delete=False
-        ) as tmp:
-            output_file = tmp.name
-
-        # Run Claude Code
-        cmd = [
-            claude_path,
-            "-p",
-            test_prompt,
-            "--model",
-            "claude-haiku-4-5",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--dangerously-skip-permissions",
-        ]
-
-        with open(output_file, "w") as f:
-            result = subprocess.run(
-                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env, timeout=30
-            )
-
-        if result.returncode != 0:
-            return CheckResult(
-                success=False, error=f"Claude Code test failed: {result.stderr}"
-            )
-
-        # Parse output to verify it worked
-        claude_responded = False
-        response_text = ""
-
-        try:
-            with open(output_file, "r") as f:
-                for line in f:
-                    if line.strip():
-                        msg = json.loads(line)
-                        if msg.get("type") == "result":
-                            claude_responded = True
-                            response_text = msg.get("result", "")
-                            break
-        finally:
-            # Clean up temp file
-            if os.path.exists(output_file):
-                os.unlink(output_file)
-
-        return CheckResult(
-            success=claude_responded,
-            details={
-                "test_passed": "4" in response_text,
-                "response": response_text[:100] if response_text else "No response",
-            },
-        )
-
-    except subprocess.TimeoutExpired:
-        return CheckResult(
-            success=False, error="Claude Code test timed out after 30 seconds"
-        )
-    except Exception as e:
-        return CheckResult(success=False, error=f"Claude Code test error: {str(e)}")
+def check_copilot() -> CheckResult:
+    """Test Copilot CLI authentication and response parsing."""
+    with tempfile.TemporaryDirectory() as output_dir:
+        response = prompt_copilot(AgentPromptRequest(
+            prompt="What is 2+2? Just respond with the number, nothing else.",
+            adw_id="health_check",
+            model="sonnet",
+            output_file=os.path.join(output_dir, "raw_output.jsonl"),
+        ), timeout=30)
+    if not response.success:
+        return CheckResult(success=False, error=response.output)
+    test_passed = response.output.strip() == "4"
+    return CheckResult(
+        success=test_passed,
+        error=None if test_passed else "Copilot returned an unexpected response",
+        details={"test_passed": test_passed, "response": response.output[:100]},
+    )
 
 
 def check_github_cli() -> CheckResult:
@@ -291,19 +202,12 @@ def run_health_check() -> HealthCheckResult:
         if gh_check.error:
             result.errors.append(gh_check.error)
 
-    # Check Claude Code - only if we have the API key
-    if os.getenv("ANTHROPIC_API_KEY"):
-        claude_check = check_claude_code()
-        result.checks["claude_code"] = claude_check
-        if not claude_check.success:
-            result.success = False
-            if claude_check.error:
-                result.errors.append(claude_check.error)
-    else:
-        result.checks["claude_code"] = CheckResult(
-            success=False,
-            details={"skipped": True, "reason": "ANTHROPIC_API_KEY not set"},
-        )
+    copilot_check = check_copilot()
+    result.checks["copilot"] = copilot_check
+    if not copilot_check.success:
+        result.success = False
+        if copilot_check.error:
+            result.errors.append(copilot_check.error)
 
     return result
 
@@ -365,8 +269,6 @@ def main():
     # Print next steps
     if not result.success:
         print("\n📝 Next Steps:")
-        if any("ANTHROPIC_API_KEY" in e for e in result.errors):
-            print("   1. Set ANTHROPIC_API_KEY in your .env file")
         if any("GITHUB_PAT" in e for e in result.errors):
             print("   2. Set GITHUB_PAT in your .env file")
         if any("GitHub CLI" in e for e in result.errors):

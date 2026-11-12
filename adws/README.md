@@ -1,6 +1,6 @@
 # AI Developer Workflow (ADW) System
 
-ADW automates software development by integrating GitHub issues with Claude Code CLI to classify issues, generate plans, implement solutions, and create pull requests.
+ADW automates software development by integrating GitHub issues with Copilot CLI to classify issues, generate plans, implement solutions, and create pull requests.
 
 ## Quick Start
 
@@ -8,8 +8,7 @@ ADW automates software development by integrating GitHub issues with Claude Code
 
 ```bash
 export GITHUB_REPO_URL="https://github.com/owner/repository"
-export ANTHROPIC_API_KEY="sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-export CLAUDE_CODE_PATH="/path/to/claude"  # Optional, defaults to "claude"
+export COPILOT_CODE_PATH="/path/to/copilot"  # Optional, defaults to "copilot"
 export GITHUB_PAT="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # Optional, only if using different account than 'gh auth login'
 ```
 
@@ -21,8 +20,8 @@ brew install gh              # macOS
 # or: sudo apt install gh    # Ubuntu/Debian
 # or: winget install --id GitHub.cli  # Windows
 
-# Claude Code CLI
-# Follow instructions at https://docs.anthropic.com/en/docs/claude-code
+# Copilot CLI
+# Follow instructions at https://docs.github.com/en/copilot/how-tos/copilot-cli/install-copilot-cli
 
 # Python dependency manager (uv)
 curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
@@ -30,6 +29,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
 
 # Authenticate GitHub
 gh auth login
+copilot login
 ```
 
 ### 3. Run ADW
@@ -174,21 +174,21 @@ uv run trigger_webhook.py
 ### Environment Issues
 ```bash
 # Check required variables
-env | grep -E "(GITHUB|ANTHROPIC|CLAUDE)"
+env | grep -E "(GITHUB|COPILOT)"
 
 # Verify GitHub auth
 gh auth status
 
-# Test Claude Code
-claude --version
+# Test Copilot
+copilot --version
 ```
 
 ### Common Errors
 
-**"Claude Code CLI is not installed"**
+**"Copilot CLI is not installed"**
 ```bash
-which claude  # Check if installed
-# Reinstall from https://docs.anthropic.com/en/docs/claude-code
+which copilot  # Check if installed
+# Reinstall from https://docs.github.com/en/copilot/how-tos/copilot-cli/install-copilot-cli
 ```
 
 **"Missing GITHUB_PAT"** (Optional - only needed if using different account than 'gh auth login')
@@ -217,9 +217,13 @@ Each workflow run gets a unique 8-character ID (e.g., `a1b2c3d4`) that appears i
 - Git commits and PRs
 
 ### Model Selection
-Edit `agent.py` line 129 to change model:
-- `model="sonnet"` - Faster, lower cost (default)
-- `model="opus"` - Better for complex tasks
+Workflow requests select `sonnet` or `opus`; `agent.py` maps these to Copilot model IDs.
+The selected models must be available to your Copilot account.
+
+The workflow loads skills from `.github/skills/`, which refer to the existing
+templates in `.claude/commands/`. Template arguments are passed as a JSON array.
+Each workflow invocation trusts this repository and uses `--allow-all`, so run
+it only in a repository and environment you trust.
 
 ### Output Structure
 ```
@@ -242,7 +246,7 @@ agents/
 ## Technical Details
 
 ### Core Components
-- `agent.py` - Claude Code CLI integration
+- `agent.py` - Copilot CLI integration
 - `data_types.py` - Pydantic models for type safety
 - `github.py` - GitHub API operations
 - `adw_plan_build.py` - Main workflow orchestration (plan & build)
@@ -258,10 +262,10 @@ Example: `feat-456-e5f6g7h8-add-user-authentication`
 {type}: {description} for #{issue_number}
 
 Generated with ADW ID: {adw_id}
-🤖 Generated with [Claude Code](https://claude.ai/code)
+🤖 Generated with Copilot
 ```
 
 ### API Rate Limits
 - GitHub: 5000 requests/hour (authenticated)
-- Anthropic: Based on your plan tier
+- Copilot: Based on your plan and available models
 - Automatic retry with exponential backoff

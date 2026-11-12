@@ -12,18 +12,18 @@ Workflow:
 1. Fetch GitHub issue details
 2. Create feature branch: feature/issue-{number}-{slug}
 3. Plan Agent: Generate implementation plan
-   - Prompt Claude Code with issue context
+   - Prompt Copilot with issue context
    - Comment plan on issue
    - Commit: "chore: add implementation plan for #{number}"
 4. Build Agent: Implement the solution
-   - Prompt Claude Code with plan + codebase context
+   - Prompt Copilot with plan + codebase context
    - Comment implementation summary on issue
    - Commit: "feature: implement #{number} - {title}"
 5. Create PR with full context
 
 Environment Requirements:
-- ANTHROPIC_API_KEY: Anthropic API key
-- CLAUDE_CODE_PATH: Path to Claude CLI
+- COPILOT_CODE_PATH: (Optional) Path to Copilot CLI; defaults to copilot
+- Authenticate Copilot with `copilot login` or a supported GitHub token.
 - GITHUB_PAT: (Optional) GitHub Personal Access Token - only if using a different account than 'gh auth login'
 """
 
@@ -56,27 +56,6 @@ AGENT_CLASSIFIER = "issue_classifier"
 AGENT_PLAN_FINDER = "plan_finder"
 AGENT_BRANCH_GENERATOR = "branch_generator"
 AGENT_PR_CREATOR = "pr_creator"
-
-
-def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
-    """Check that all required environment variables are set."""
-    required_vars = [
-        "ANTHROPIC_API_KEY",
-        "CLAUDE_CODE_PATH",
-    ]
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-
-    if missing_vars:
-        error_msg = "Error: Missing required environment variables:"
-        if logger:
-            logger.error(error_msg)
-            for var in missing_vars:
-                logger.error(f"  - {var}")
-        else:
-            print(error_msg, file=sys.stderr)
-            for var in missing_vars:
-                print(f"  - {var}", file=sys.stderr)
-        sys.exit(1)
 
 
 def parse_args(logger: Optional[logging.Logger] = None) -> Tuple[str, Optional[str]]:
@@ -370,9 +349,6 @@ def main():
     # Set up logger with ADW ID
     logger = setup_logger(adw_id, "adw_plan_build")
     logger.info(f"ADW ID: {adw_id}")
-
-    # Validate environment (now with logger)
-    check_env_vars(logger)
 
     # Get repo information from git remote
     try:

@@ -14,7 +14,7 @@ Usage: uv run trigger_webhook.py
 
 Environment Requirements:
 - PORT: Server port (default: 8001)
-- All adw_plan_build.py requirements (GITHUB_PAT, ANTHROPIC_API_KEY, etc.)
+- Copilot CLI authentication and the adw_plan_build.py configuration
 """
 
 import os
