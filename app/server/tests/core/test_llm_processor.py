@@ -1,9 +1,10 @@
 import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from core.llm_processor import (
     generate_sql_with_openai, 
     generate_sql_with_anthropic, 
+    generate_sql_with_copilot,
     format_schema_for_prompt,
     generate_sql
 )
@@ -285,3 +286,87 @@ class TestLLMProcessor:
             
             assert result == "SELECT * FROM sales"
             mock_openai_func.assert_called_once_with("Show sales data", schema_info)
+
+    @pytest.mark.parametrize(
+        ("keys", "provider", "expected"),
+        [
+            ({"COPILOT_GITHUB_TOKEN": "token"}, "openai", "copilot"),
+            ({"OPENAI_API_KEY": "key", "COPILOT_GITHUB_TOKEN": "token"}, "openai", "openai"),
+            ({"ANTHROPIC_API_KEY": "key", "COPILOT_GITHUB_TOKEN": "token"}, "openai", "anthropic"),
+            ({"OPENAI_API_KEY": "key"}, "copilot", "copilot"),
+            ({}, "copilot", "copilot"),
+        ],
+    )
+    def test_copilot_routing(self, keys, provider, expected):
+        with patch.dict(os.environ, keys, clear=True), \
+             patch('core.llm_processor.generate_sql_with_openai', return_value="openai"), \
+             patch('core.llm_processor.generate_sql_with_anthropic', return_value="anthropic"), \
+             patch('core.llm_processor.generate_sql_with_copilot', return_value="copilot"):
+            assert generate_sql(QueryRequest(query="show users", llm_provider=provider), {}) == expected
+
+    @pytest.mark.parametrize("content", ["```sql\nSELECT * FROM users\n```", None, "  "])
+    def test_copilot_response_and_cleanup(self, content):
+        copilot = pytest.importorskip("copilot")
+        from copilot.session_events import AssistantMessageData
+
+        session = MagicMock()
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock(return_value=False)
+        session.send_and_wait = AsyncMock(return_value=(
+            MagicMock(data=AssistantMessageData(content=content, message_id="id"))
+            if content is not None else None
+        ))
+        client = MagicMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+        client.create_session = AsyncMock(return_value=session)
+
+        schema = {'tables': {'users': {'columns': {'id': 'INTEGER'}, 'row_count': 1}}}
+        with patch.object(copilot, "CopilotClient", return_value=client) as client_class:
+            if content and content.strip():
+                assert generate_sql_with_copilot("show users", schema) == "SELECT * FROM users"
+                prompt = session.send_and_wait.await_args.args[0]
+                assert "show users" in prompt
+                assert "Table: users" in prompt
+            else:
+                with pytest.raises(RuntimeError, match="Copilot returned"):
+                    generate_sql_with_copilot("show users", schema)
+
+        client_class.assert_called_once_with(mode="empty")
+        client.create_session.assert_awaited_once_with(model="auto", available_tools=[])
+        session.__aexit__.assert_awaited_once()
+        client.__aexit__.assert_awaited_once()
+
+    def test_copilot_errors_are_reported(self):
+        copilot = pytest.importorskip("copilot")
+        with patch.object(copilot, "CopilotClient", side_effect=RuntimeError("authentication failed")):
+            with pytest.raises(RuntimeError, match="Copilot: authentication failed"):
+                generate_sql_with_copilot("show users", {"tables": {}})
+
+    def test_query_endpoint_runs_copilot_from_async_handler(self):
+        copilot = pytest.importorskip("copilot")
+        from fastapi.testclient import TestClient
+        from copilot.session_events import AssistantMessageData
+        import server
+
+        session = MagicMock()
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock()
+        session.send_and_wait = AsyncMock(return_value=MagicMock(
+            data=AssistantMessageData(content="SELECT 1", message_id="id")
+        ))
+        client = MagicMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock()
+        client.create_session = AsyncMock(return_value=session)
+        with patch.object(copilot, "CopilotClient", return_value=client), \
+             patch.object(server, "get_database_schema", return_value={"tables": {}}), \
+             patch.object(server, "execute_sql_safely", return_value={
+                 "error": None, "results": [{"1": 1}], "columns": ["1"]
+             }), patch.dict(os.environ, {}, clear=True):
+            response = TestClient(server.app).post(
+                "/api/query", json={"query": "show one", "llm_provider": "copilot"}
+            )
+        assert response.status_code == 200
+        assert response.json()["sql"] == "SELECT 1"
+        assert response.json()["error"] is None

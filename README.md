@@ -4,7 +4,7 @@ A web application that converts natural language queries to SQL using AI, built 
 
 ## Features
 
-- 🗣️ Natural language to SQL conversion using OpenAI or Anthropic
+- 🗣️ Natural language to SQL conversion using OpenAI, Anthropic, or GitHub Copilot
 - 📁 Drag-and-drop file upload (.csv and .json)
 - 📊 Interactive table results display
 - 🔒 SQL injection protection
@@ -14,7 +14,8 @@ A web application that converts natural language queries to SQL using AI, built 
 
 - Python 3.10+
 - Node.js 18+
-- OpenAI API key and/or Anthropic API key
+- OpenAI API key, Anthropic API key, or GitHub Copilot access
+- Python 3.11+ for the Copilot provider
 - 'gh' github cli
 - astral uv
 
@@ -47,6 +48,18 @@ cd app/server
 cp .env.sample .env
 # Edit .env and add your API keys
 ```
+
+For Copilot, set `COPILOT_GITHUB_TOKEN` in `app/server/.env` to a supported
+GitHub token with Copilot access. The Copilot SDK requires Python 3.11+ and
+downloads its runtime on first use; it can also use an authenticated Copilot
+CLI or GitHub CLI account when `llm_provider` is explicitly set to `copilot`.
+See [Copilot SDK authentication](https://github.com/github/copilot-sdk/blob/main/docs/auth/authenticate.md)
+for supported tokens and subscription requirements.
+
+The web app automatically uses the first configured key in this order: OpenAI,
+Anthropic, Copilot. API clients can explicitly set `llm_provider` to `copilot`
+to use Copilot even when other keys are configured. As with other providers,
+the query and database schema are sent to the selected service.
 
 ## Quick Start
 
@@ -199,7 +212,7 @@ uv run pytest tests/test_sql_injection.py -v
 ## Troubleshooting
 
 **Backend won't start:**
-- Check Python version: `python --version` (requires 3.12+)
+- Check Python version: `python --version` (3.10+; Copilot requires 3.11+)
 - Verify API keys are set: `echo $OPENAI_API_KEY`
 
 **Frontend errors:**

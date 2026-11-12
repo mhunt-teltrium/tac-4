@@ -17,7 +17,7 @@ class FileUploadResponse(BaseModel):
 # Query Models  
 class QueryRequest(BaseModel):
     query: str = Field(..., description="Natural language query")
-    llm_provider: Literal["openai", "anthropic"] = "openai"
+    llm_provider: Literal["openai", "anthropic", "copilot"] = "openai"
     table_name: Optional[str] = None  # If querying specific table
 
 class QueryResponse(BaseModel):

@@ -10,6 +10,7 @@ dependencies = [
     "python-multipart==0.0.20",
     "openai==1.88.0",
     "anthropic==0.54.0",
+    "github-copilot-sdk==1.0.31; python_version >= '3.11'",
     "pandas==2.3.0",
     "python-dotenv==1.0.1",
 ]

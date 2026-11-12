@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 from datetime import datetime
 import os
 import sqlite3
@@ -116,7 +117,7 @@ async def process_natural_language_query(request: QueryRequest) -> QueryResponse
         schema_info = get_database_schema()
         
         # Generate SQL using routing logic
-        sql = generate_sql(request, schema_info)
+        sql = await run_in_threadpool(generate_sql, request, schema_info)
         
         # Execute SQL query
         start_time = datetime.now()
